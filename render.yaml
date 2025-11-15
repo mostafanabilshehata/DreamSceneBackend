@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: dreamscene-backend
+    env: java
+    region: oregon
+    plan: free
+    buildCommand: ./mvnw clean package -DskipTests
+    startCommand: java -jar target/dreamscene-backend-0.0.1-SNAPSHOT.jar
+    envVars:
+      - key: JAVA_VERSION
+        value: 17
+      - key: MYSQL_HOST
+        sync: false
+      - key: MYSQL_PORT
+        sync: false
+      - key: MYSQL_DATABASE
+        sync: false
+      - key: MYSQL_USER
+        sync: false
+      - key: MYSQL_PASSWORD
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SENDGRID_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: CORS_ORIGINS
+        value: http://localhost:4200,https://dreamscene.netlify.app
+      - key: LOG_LEVEL
+        value: INFO
+      - key: JPA_SHOW_SQL
+        value: false
+      - key: PORT
+        value: 8080
