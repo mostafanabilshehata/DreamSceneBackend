@@ -157,7 +157,12 @@ CREATE TABLE email_verification_codes (
 -- Password: admin123
 -- Note: You should change this password after first login!
 INSERT INTO users (username, email, password, role) VALUES 
-('admin', 'admin@dreamscene.com', '$2a$10$dXJ3SW6G7P50lGmMkkmwe.20cQQubK3.HZWzG3YB1tlRy.fqvM/BG', 'ADMIN');
+('admin', 'admin@dreamscene.com', '$2a$10$dXJ3SW6G7P50lGmMkkmwe.20cQQubK3.HZWzG3YB1tlRy.fqvM/BG', 'ADMIN')
+ON DUPLICATE KEY UPDATE username=username;
+
+-- Update admin password if you need to change it later
+-- Uncomment and run this with your new BCrypt hashed password:
+-- UPDATE users SET password = '$2a$10$YOUR_NEW_BCRYPT_HASH_HERE' WHERE username = 'admin';
 
 -- Insert sample categories
 INSERT INTO categories (name, description, image_url) VALUES

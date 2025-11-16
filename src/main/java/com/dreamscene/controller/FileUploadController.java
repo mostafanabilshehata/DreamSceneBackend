@@ -1,90 +1,100 @@
 package com.dreamscene.controller;
 
-import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
+import com.cloudinary.Cloudinary;
+import com.cloudinary.utils.ObjectUtils;
+import com.dreamscene.dto.response.ApiResponse;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/admin")
-@RequiredArgsConstructor
+@CrossOrigin(origins = "*")
 public class FileUploadController {
 
-    @Value("${file.upload-dir:uploads}")
-    private String uploadDir;
-
-    @Value("${server.port:8081}")
-    private String serverPort;
+    @Autowired
+    private Cloudinary cloudinary;
 
     @PostMapping("/upload-image")
-    public ResponseEntity<Map<String, String>> uploadImage(
-            @RequestParam("file") MultipartFile file) {
-        
+    public ResponseEntity<ApiResponse<String>> uploadImage(@RequestParam("file") MultipartFile file) {
         try {
             // Validate file
             if (file.isEmpty()) {
-                Map<String, String> error = new HashMap<>();
-                error.put("error", "Please select a file to upload");
-                return ResponseEntity.badRequest().body(error);
+                return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("File is empty"));
             }
 
             // Validate file type
             String contentType = file.getContentType();
             if (contentType == null || !contentType.startsWith("image/")) {
-                Map<String, String> error = new HashMap<>();
-                error.put("error", "Only image files are allowed");
-                return ResponseEntity.badRequest().body(error);
+                return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("Only image files are allowed"));
             }
 
-            // Validate file size (5MB max)
-            long maxSize = 5 * 1024 * 1024; // 5MB in bytes
-            if (file.getSize() > maxSize) {
-                Map<String, String> error = new HashMap<>();
-                error.put("error", "File size must not exceed 5MB");
-                return ResponseEntity.badRequest().body(error);
+            // Validate file size (10MB max)
+            if (file.getSize() > 10 * 1024 * 1024) {
+                return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("File size must be less than 10MB"));
             }
 
-            // Create upload directory if it doesn't exist
-            Path uploadPath = Paths.get(uploadDir);
-            if (!Files.exists(uploadPath)) {
-                Files.createDirectories(uploadPath);
-            }
+            // Upload to Cloudinary
+            Map uploadResult = cloudinary.uploader().upload(file.getBytes(),
+                ObjectUtils.asMap(
+                    "folder", "dreamscene",
+                    "resource_type", "auto"
+                ));
 
-            // Generate unique filename
-            String originalFilename = file.getOriginalFilename();
-            String fileExtension = "";
-            if (originalFilename != null && originalFilename.contains(".")) {
-                fileExtension = originalFilename.substring(originalFilename.lastIndexOf("."));
-            }
-            String uniqueFilename = UUID.randomUUID().toString() + fileExtension;
+            String imageUrl = (String) uploadResult.get("secure_url");
 
-            // Save file
-            Path filePath = uploadPath.resolve(uniqueFilename);
-            Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
-
-            // Generate URL
-            String imageUrl = "http://localhost:" + serverPort + "/uploads/" + uniqueFilename;
-
-            // Prepare response
-            Map<String, String> response = new HashMap<>();
-            response.put("imageUrl", imageUrl);
-
-            return ResponseEntity.ok(response);
+            return ResponseEntity.ok(ApiResponse.success("Image uploaded successfully", imageUrl));
 
         } catch (IOException e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("error", "Failed to upload file: " + e.getMessage());
-            return ResponseEntity.internalServerError().body(error);
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error("Failed to upload image: " + e.getMessage()));
         }
+    }
+
+    @DeleteMapping("/delete-image")
+    public ResponseEntity<ApiResponse<Void>> deleteImage(@RequestParam("url") String imageUrl) {
+        try {
+            // Extract public_id from URL
+            String publicId = extractPublicId(imageUrl);
+            
+            if (publicId != null) {
+                cloudinary.uploader().destroy(publicId, ObjectUtils.emptyMap());
+            }
+
+            return ResponseEntity.ok(ApiResponse.success("Image deleted successfully", null));
+
+        } catch (IOException e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error("Failed to delete image: " + e.getMessage()));
+        }
+    }
+
+    private String extractPublicId(String imageUrl) {
+        try {
+            // Extract public_id from Cloudinary URL
+            // Example: https://res.cloudinary.com/cloud-name/image/upload/v123/dreamscene/image.jpg
+            // public_id: dreamscene/image
+            String[] parts = imageUrl.split("/upload/");
+            if (parts.length > 1) {
+                String path = parts[1];
+                // Remove version number (v123/)
+                path = path.replaceFirst("v\\d+/", "");
+                // Remove file extension
+                return path.substring(0, path.lastIndexOf('.'));
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 }
